@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Tasky — Admin Panel</title>
+<link href="https://fonts.cdnfonts.com/css/amsterdam-four" rel="stylesheet">
+<style>
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, rgba(255,215,0,0.6), rgba(30,144,255,0.7));
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 0;
+  }
+  .wrap {
+    width: 95%;
+    max-width: 1200px;
+    display: flex;
+    gap: 18px;
+  }
+  .sidebar, .main {
+    background: rgba(255,255,255,0.9);
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    padding: 18px;
+  }
+  .sidebar {
+    width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  h1 {
+    font-family: 'Amsterdam Four', cursive;
+    margin: 0;
+    color: #1c2833;
+  }
+  button {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    background: linear-gradient(90deg, #007bff, #ffd700);
+    color: white;
+  }
+  input, select, textarea {
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.15);
+    padding: 8px;
+  }
+  .user {
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    background: rgba(255,255,255,0.5);
+  }
+  .user.active {
+    background: linear-gradient(90deg, #007bff, #ffd700);
+    color: #1c2833;
+    font-weight: bold;
+  }
+  ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  li.task {
+    background: rgba(255,255,255,0.6);
+    padding: 10px;
+    border-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  small.updated {
+    color: #6c757d;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+  <div style="width:95%;max-width:1200px;display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+    <h1>Admin Panel</h1>
+    <div style="display:flex;gap:10px;">
+      <button onclick="location.href='admin_dashboard.html'">Dashboard</button>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="sidebar">
+      <input id="newUser" placeholder="Add user..." />
+      <button onclick="createUser()">Add</button>
+      <div id="usersList" style="overflow:auto;max-height:400px;"></div>
+      <button onclick="exportAll()">Export JSON</button>
+      <button onclick="importAll()">Import JSON</button>
+    </div>
+
+    <div class="main">
+      <h3>Selected User: <span id="selUser">None</span></h3>
+      <input id="taskSearch" placeholder="Search tasks..." oninput="filterTasks()" style="margin-bottom:10px;width:100%;max-width:300px;">
+      <ul id="taskArea"></ul>
+    </div>
+  </div>
+
+<script>
+const me = localStorage.getItem('currentUser');
+if (me !== 'admin') location.href = 'index.html';
+
+function getUsers() { return JSON.parse(localStorage.getItem('users') || '{}'); }
+function saveUsers(u) { localStorage.setItem('users', JSON.stringify(u)); }
+
+let selected = null;
+
+function renderUsers() {
+  const list = document.getElementById('usersList');
+  const users = getUsers();
+  list.innerHTML = '';
+  Object.keys(users).forEach(u => {
+    if (u === 'admin') return;
+    const div = document.createElement('div');
+    div.className = 'user' + (u === selected ? ' active' : '');
+    div.innerHTML = `<span>${u}</span><button onclick="deleteUser(event,'${u}')">🗑</button>`;
+    div.onclick = () => selectUser(u);
+    list.appendChild(div);
+  });
+}
+
+function selectUser(u) {
+  selected = u;
+  document.getElementById('selUser').textContent = u;
+  renderUsers();
+  renderTasks();
+}
+
+function createUser() {
+  const n = document.getElementById('newUser').value.trim();
+  if (!n) return;
+  const users = getUsers();
+  if (users[n]) return alert('User exists');
+  users[n] = { password: '', tasks: [] };
+  saveUsers(users);
+  renderUsers();
+  document.getElementById('newUser').value = '';
+}
+
+function deleteUser(e, u) {
+  e.stopPropagation();
+  if (!confirm('Delete this user?')) return;
+  const users = getUsers();
+  delete users[u];
+  saveUsers(users);
+  if (selected === u) selected = null;
+  renderUsers();
+  renderTasks();
+}
+
+function renderTasks() {
+  const area = document.getElementById('taskArea');
+  area.innerHTML = '';
+  if (!selected) return;
+  const users = getUsers();
+  const tasks = users[selected]?.tasks || [];
+
+  tasks.forEach((t, i) => {
+    const start = t.startDate || 'No start';
+    const end = t.endDate || 'No end';
+    const cat = t.category || 'Uncategorized';
+    const updated = t.lastUpdated ? new Date(t.lastUpdated).toLocaleString() : null;
+
+    const li = document.createElement('li');
+    li.className = 'task';
+    li.innerHTML = `
+      <div>
+        <b>${t.text}</b><br>
+        <small>📅 Start: ${start} | End: ${end}</small><br>
+        <small>🏷️ ${cat}</small><br>
+        <small>${t.notes || ''}</small><br>
+        ${updated ? `<small class="updated">🕒 Last Updated: ${updated}</small>` : ''}
+      </div>
+      <div>
+        <button onclick="toggleTask('${selected}',${i})">${t.completed ? 'Undo' : 'Done'}</button>
+        <button onclick="removeTask('${selected}',${i})">🗑</button>
+      </div>`;
+    area.appendChild(li);
+  });
+
+  filterTasks();
+}
+
+function filterTasks() {
+  const q = document.getElementById('taskSearch').value.toLowerCase();
+  const area = document.getElementById('taskArea');
+  const items = area.querySelectorAll('li.task');
+  items.forEach(li => {
+    const text = li.innerText.toLowerCase();
+    li.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+function toggleTask(u, i) {
+  const users = getUsers();
+  users[u].tasks[i].completed = !users[u].tasks[i].completed;
+  users[u].tasks[i].lastUpdated = new Date().toISOString();
+  saveUsers(users);
+  renderTasks();
+}
+
+function removeTask(u, i) {
+  if (!confirm('Delete task?')) return;
+  const users = getUsers();
+  users[u].tasks.splice(i, 1);
+  saveUsers(users);
+  renderTasks();
+}
+
+function exportAll() {
+  const blob = new Blob([JSON.stringify(getUsers(), null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'users_tasks.json';
+  a.click();
+}
+
+function importAll() {
+  const data = prompt('Paste JSON:');
+  if (!data) return;
+  try {
+    const obj = JSON.parse(data);
+    localStorage.setItem('users', JSON.stringify(obj));
+    alert('Imported');
+    renderUsers();
+    renderTasks();
+  } catch (e) {
+    alert('Invalid JSON');
+  }
+}
+
+function logout() {
+  localStorage.removeItem('currentUser');
+  location.href = 'index.html';
+}
+
+renderUsers();
+</script>
+</body>
+</html>
